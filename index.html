@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Juego de Contagio Viral 2D</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        :root{
+            --bg:#2b2b2d;
+            --panel:#1f1f21;
+            --accent:#f0c419;
+            --muted:#bdbdbd;
+            --white:#ffffff;
+            --btn-bg:#000;
+            --btn-radius:8px;
+            --control-bg: #f4f4f4;
+            --control-border: #ccc;
+        }
+        html,body{height:100%;margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;background:var(--bg);color:var(--white);}
+        .page {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height:100vh;
+            box-sizing:border-box;
+        }
+
+        /* Header */
+        header.siteHeader{
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:16px;
+            padding:14px 28px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .titleWrap{ text-align:center; }
+        .titleLarge{font-size:40px;letter-spacing:4px;color:#d1c8c2;font-weight:800;text-transform:uppercase;text-shadow: 0 4px 0 rgba(0,0,0,0.6);}
+        .subtitle{font-size:20px;color:var(--muted);font-weight:700;letter-spacing:1px;margin-top:6px;}
+
+        /* Main layout: left menu, center area */
+        .main {
+            display:grid;
+            grid-template-columns: 360px 1fr;
+            gap:18px;
+            padding:22px;
+            align-items:start;
+            transition: grid-template-columns .18s ease;
+        }
+
+        /* Colocar la pantalla de introducción en la COLUMNA IZQUIERDA
+           para que lo que está encerrado en naranja aparezca a la izquierda
+           y el área del juego (cabecera + canvas) quede a la derecha. */
+        #introScreen {
+            grid-column: 1 / 2;
+            justify-self: center;
+            align-self: start;
+        }
+
+        /* Media: cuando el layout pasa a una columna, dejar que intro fluya normalmente */
+        @media (max-width:1100px){
+            #introScreen { grid-column: auto; }
+        }
+
+        /* Menu box */
+        .gameMenuBox{
+            background:var(--panel);
+            border-radius:10px;
+            padding:22px;
+            position:relative;
+            box-sizing:border-box;
+            min-height:420px;
+            display:flex;
+            flex-direction:column;
+            justify-content:flex-start;
+            gap:12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            overflow:hidden;
+        }
+
+        .menuTitle{font-size:18px;font-weight:800;color:var(--white);margin-top:4px}
+        .menuDesc{font-size:13px;color:var(--muted);line-height:1.25;margin-bottom:8px}
+
+        .menuButtons{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+        .menuButtons .btn{
+            background:var(--btn-bg);
+            color:var(--white);
+            border:none;
+            padding:10px 14px;
+            border-radius:var(--btn-radius);
+            font-weight:700;
+            cursor:pointer;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+            transition: transform .08s ease, box-shadow .12s ease, opacity .12s;
+            text-align:center;
+            font-size:15px;
+        }
+        .menuButtons .btn.secondary{ background:transparent;border:2px solid rgba(255,255,255,0.06); color:var(--white);font-weight:700; }
+
+        .infoSmall{ font-size:12px;color:var(--muted);line-height:1.4;margin-top:auto;padding-top:6px;}
+        .infoSmall strong{color:var(--white);}
+
+        /* Center area: contains stats panel and canvas */
+        .centerCol{ display:flex;flex-direction:column;align-items:center;gap:18px; width:100%; }
+        .gameHeader { font-size:22px; font-weight:800; color:#111; background:#fff; color:#111; padding:8px 16px; border-radius:6px; }
+        .gameInner { display:flex; gap:18px; align-items:flex-start; width:100%; justify-content:center; }
+
+        /* Stats panel (the orange area) - visible in-game */
+        #statsPanel {
+            width:300px;
+            background:#fafafa;
+            color:#111;
+            border:1px solid #ddd;
+            padding:14px;
+            box-sizing:border-box;
+            border-radius:6px;
+            font-size:13px;
+            align-self:flex-start;
+            max-height:560px;
+            overflow:auto;
+        }
+        #statsPanel .stat-header { font-size:15px; font-weight:800; margin-bottom:8px; color:#222; }
+        #statsPanel .stat-row { display:flex; justify-content:space-between; align-items:center; margin:6px 0; }
+        #statsPanel .stat-label { font-weight:700; color:#2c3e50; font-size:13px; }
+        #statsPanel .stat-value { font-weight:800; font-size:14px; }
+
+        .herd-control { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; align-items:center; margin-top:6px; }
+        .herd-control .label { grid-column:1 / 4; font-size:12px; color:#444; margin-bottom:6px; }
+        .small-btn { padding:6px 8px; font-size:13px; }
+        .number-display { text-align:center; font-weight:700; font-size:14px; }
+
+        /* Controls for movement/time (replacing the slider) */
+        .speed-controls { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+        .speed-row { display:flex; align-items:center; gap:8px; }
+        .speed-row label { flex:1; font-size:12px; color:#444; }
+        .speed-row .control { display:flex; align-items:center; gap:8px; }
+        .spin-btn { background:var(--control-bg); border:1px solid var(--control-border); padding:6px 10px; border-radius:6px; cursor:pointer; color:#111; }
+        .spin-value { min-width:40px; text-align:center; background:white; color:#111; border:1px solid var(--control-border); padding:6px 8px; border-radius:6px; }
+
+        /* Canvas container */
+        #canvasWrapper{ flex:1; display:flex; justify-content:center; align-items:center; position:relative; }
+        .canvasContainer{ width:760px; max-width:100%; box-shadow: 0 10px 30px rgba(0,0,0,0.6); background: #fffbe6; border-radius:2px; padding:10px; box-sizing:border-box; position:relative; }
+        canvas{ display:block; width:100%; height:450px; border:2px solid rgba(0,0,0,0.5); background:#fffbe6; }
+
+        /* Pause button inside canvas area */
+        #pauseButton {
+            position:absolute;
+            top:8px;
+            right:8px;
+            z-index:80;
+            padding:8px 10px;
+            border-radius:6px;
+            border:1px solid rgba(0,0,0,0.15);
+            background:#fff;
+            color:#111;
+            cursor:pointer;
+            box-shadow:0 6px 14px rgba(0,0,0,0.25);
+            display:none;
+        }
+
+        /* small responsive tweaks */
+        @media (max-width:1100px){
+            .main{grid-template-columns:1fr; grid-auto-rows: auto; padding:14px; gap:12px;}
+            .gameMenuBox{order:2;width:100%}
+            .centerCol{order:1}
+            #statsPanel{width:92%}
+            canvas{height:360px}
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="siteHeader">
+            <div class="titleWrap">
+                <div class="titleLarge">Universidad Central<br/>del Ecuador</div>
+                <div class="subtitle">Facultad de Medicina Veterinaria - Virología</div>
+            </div>
+        </header>
+
+        <main class="main" role="main">
+            <!-- INTRO SCREEN -->
+            <section id="introScreen" class="gameMenuBox" style="max-width:600px;margin:auto;text-align:center;display:none;">
+                <h2>Introducción</h2>
+                <p style="font-size:14px;line-height:1.4;color:#ccc;">
+                    En un ecosistema silvestre, un lobo se alimenta de un animal infectado por un virus emergente.
+                    Sin saberlo, se convierte en el primer portador.  
+                    <br><br>
+                    A partir de este evento, el virus comienza a propagarse entre las manadas.
+                    Tu misión será contener la epidemia antes de que se salga de control.
+                </p>
+
+                <button id="introContinue" class="btn" style="margin-top:12px;">
+                    Continuar
+                </button>
+            </section>
+
+            <!-- LEFT: Menu box -->
+            <aside>
+                <div id="menu" class="gameMenuBox" role="navigation" aria-label="Menú del Juego">
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between">
+                            <div class="menuTitle">MENÚ DEL JUEGO</div>
+                        </div>
+                        <div class="menuDesc">Bienvenido al juego educativo sobre epidemias virales. Elige la opción</div>
+                    </div>
+
+                    <div class="menuButtons" style="margin-top:8px;">
+                        <button id="newGame" class="btn">Nuevo juego</button>
+                        <button id="resumeGame" class="btn secondary" style="display:none;">Continuar con el juego</button>
+                        <button id="backToMenu" class="btn secondary" style="display:none;">Volver al Menú</button>
+                    </div>
+
+                    <div class="infoSmall" style="margin-top:14px;">
+                        <div style="border-left:3px solid var(--accent);padding-left:8px;">
+                            Instrucciones: Clic izquierdo para vacunar <strong style="color:#7CFC00"> (verde)</strong>, clic derecho para cuarentena <strong style="color:#e74c3c">(rojo infectado)</strong>. Objetivo: Controlar la epidemia.
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CENTER: Header + stats panel + canvas -->
+            <section class="centerCol" aria-label="Área de juego">
+                <div class="gameHeader">Simulación de Contagio Viral en Animales (2D)</div>
+
+                <div class="gameInner">
+                    <!-- Stats panel visible in game -->
+                    <div id="statsPanel">
+                        <div class="stat-header">Parámetros</div>
+
+                        <div class="stat-row">
+                            <div class="stat-label">Vacunas usadas</div>
+                            <div class="stat-value"><span id="vacunas">0 / 0</span></div>
+                        </div>
+
+                        <div class="stat-row">
+                            <div class="stat-label">Cuarentenas</div>
+                            <div class="stat-value"><span id="cuarentenas">0</span></div>
+                        </div>
+
+                        <div style="margin-top:8px;">
+                            <div class="stat-label" style="font-size:13px; margin-bottom:6px;">Manadas (Herds) y animales por manada</div>
+
+                            <div class="herd-control">
+                                <div class="label">Manadas</div>
+                                <button id="decHerds" class="small-btn">−</button>
+                                <div id="herds-count" class="number-display">3</div>
+                                <button id="incHerds" class="small-btn">+</button>
+
+                                <div class="label">Animales por manada</div>
+                                <button id="decPerHerd" class="small-btn">−</button>
+                                <div id="perherd-count" class="number-display">16</div>
+                                <button id="incPerHerd" class="small-btn">+</button>
+
+                                <div class="label">Animales solitarios</div>
+                                <button id="decLoners" class="small-btn">−</button>
+                                <div id="loners-count" class="number-display">2</div>
+                                <button id="incLoners" class="small-btn">+</button>
+
+                                <div style="grid-column: 1 / 4; text-align: center; margin-top:6px;">
+                                    <!-- Yellow: apply immediately -->
+                                    <button id="applyHerds">Aplicar ahora</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div class="stat-header">Estadísticas</div>
+                        <div class="stat-row">
+                            <div class="stat-label">Total (T)</div>
+                            <div class="stat-value"><span id="total-count">0</span></div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Solitarios</div>
+                            <div class="stat-value"><span id="solos-count">0</span></div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Sanos (S)</div>
+                            <div class="stat-value"><span id="s-count">0</span></div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Expuestos (E)</div>
+                            <div class="stat-value"><span id="e-count">0</span></div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Infectados (I)</div>
+                            <div class="stat-value"><span id="i-count">0</span></div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Recuperados (R)</div>
+                            <div class="stat-value"><span id="r-count">0</span></div>
+                        </div>
+                        <div class="stat-row">
+                            <div class="stat-label">Muertos (D)</div>
+                            <div class="stat-value"><span id="d-count">0</span></div>
+                        </div>
+
+                        <div style="margin-top:8px;font-size:12px;color:#444;">
+                            <div id="prep-message" style="color:#f0c419;font-weight:bold;margin-bottom:6px;display:none;">⏳ Fase de Preparación - Tiempo restante: <span id="prep-countdown">180</span>s</div>
+                            <div>Tiempo de simulación: <strong><span id="sim-time">0d 0h</span></strong></div>
+                            <!-- "Desde primera infección" REMOVED as requested (orange highlight) -->
+                        </div>
+
+                        <!-- Replaced slider with separate controls (grey highlight) -->
+                        <div class="speed-controls">
+                            <div class="speed-row">
+                                <label for="moveValue">Velocidad de movimiento:</label>
+                                <div class="control">
+                                    <button id="moveMinus" class="spin-btn">−</button>
+                                    <div id="moveValue" class="spin-value">1.0</div>
+                                    <button id="movePlus" class="spin-btn">+</button>
+                                </div>
+                            </div>
+
+                            <div class="speed-row">
+                                <label for="timeValue">Velocidad de tiempo:</label>
+                                <div class="control">
+                                    <button id="timeMinus" class="spin-btn">−</button>
+                                    <div id="timeValue" class="spin-value">1.0</div>
+                                    <button id="timePlus" class="spin-btn">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Canvas area (centered) -->
+                    <div id="canvasWrapper">
+                        <div class="canvasContainer">
+                            <canvas id="gameCanvas" width="760" height="450"></canvas>
+                            <button id="pauseButton" title="Pausar">Pausar</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Tooltip for canvas names -->
+    <div id="tooltip" style="position:absolute;pointer-events:none;display:none;background:rgba(0,0,0,0.8);color:#fff;padding:6px 8px;border-radius:6px;font-size:13px;z-index:80;"></div>
+
+    <script>
+        // DOM elements
+        const mainElem = document.querySelector('.main');
+        const menuDiv = document.getElementById('menu');
+        const statsPanel = document.getElementById('statsPanel');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const pauseButton = document.getElementById('pauseButton');
+
+        // herds UI
+        const decHerdsBtn = document.getElementById('decHerds');
+        const incHerdsBtn = document.getElementById('incHerds');
+        const decPerHerdBtn = document.getElementById('decPerHerd');
+        const incPerHerdBtn = document.getElementById('incPerHerd');
+        const decLonersBtn = document.getElementById('decLoners');
+        const incLonersBtn = document.getElementById('incLoners');
+        const applyHerdsBtn = document.getElementById('applyHerds');
+
+        const herdsCountEl = document.getElementById('herds-count');
+        const perHerdCountEl = document.getElementById('perherd-count');
+        const lonersCountEl = document.getElementById('loners-count');
+
+        // stats UI
+        const vacunasEl = document.getElementById('vacunas');
+        const cuarentenasEl = document.getElementById('cuarentenas'); // <-- agregado
+        const totalCountEl = document.getElementById('total-count');
+        const solosCountEl = document.getElementById('solos-count');
+        const sCountEl = document.getElementById('s-count');
+        const eCountEl = document.getElementById('e-count');
+        const iCountEl = document.getElementById('i-count');
+        const rCountEl = document.getElementById('r-count');
+        const dCountEl = document.getElementById('d-count');
+        const simTimeDisplay = document.getElementById('sim-time');
+        const prepMessageEl = document.getElementById('prep-message');
+        const prepCountdownEl = document.getElementById('prep-countdown');
+
+        // movement/time controls (grey)
+        const moveMinus = document.getElementById('moveMinus');
+        const movePlus = document.getElementById('movePlus');
+        const moveValueEl = document.getElementById('moveValue');
+
+        const timeMinus = document.getElementById('timeMinus');
+        const timePlus = document.getElementById('timePlus');
+        const timeValueEl = document.getElementById('timeValue');
+
+        // menu buttons
+        const newGameBtn = document.getElementById('newGame');
+        const resumeGameBtn = document.getElementById('resumeGame');
+        const backToMenuBtn = document.getElementById('backToMenu');
+
+        // Simulation params
+        const VACCINE_RATIO = 0.55;
+        // Increase herd spread so animals are more separated inside each herd:
+        const HERD_MIN_DIST = 120;
+        const HERD_SPREAD_RADIUS = 70; // <-- increased from 60 to 100 to space herd members more
+        const VISIT_MIN_HOURS = 2, VISIT_MAX_HOURS = 8, COOLDOWN_MIN_HOURS = 6, COOLDOWN_MAX_HOURS = 48;
+
+        let numHerds = 3, perHerd = 16, numLoners = 2;
+        let totalAnimals = numHerds * perHerd + numLoners;
+
+        // Reduced infection rate and time-scaled transmission (slower growth of exposed)
+        let INFECTION_RATE = 0.06; // per hour base probability (reduced from 0.2)
+        let DEATH_RATE = 0.1, QUARANTINE_DURATION = 10, INCUBATION_PERIOD = 5;
+
+        let max_vaccines = Math.ceil(totalAnimals * VACCINE_RATIO), vaccines_used = 0, quarantines_used = 0;
+
+        let animals = [], herdCenters = [], herdOwners = [];
+
+        let gameRunning = false, simTimeHours = 0, infectionStart = null, lastTimestamp = null;
+
+        // Game stages
+        let gameStage = 'intro'; // 'intro' | 'menu' | 'prep' | 'play' | 'end'
+
+        // Preparation phase variables
+        let prepTime = 0;
+        const PREP_DURATION = 180; // 3 minutes
+
+        // Separate multipliers:
+        let movementMultiplier = 1.0; // affects movement calculations
+        let timeMultiplier = 1.0;     // affects simulation time progression
+
+        // Canvas sizing
+        let SCREEN_WIDTH = canvas.width, SCREEN_HEIGHT = canvas.height;
+        function updateScreenSize(){ SCREEN_WIDTH = canvas.width; SCREEN_HEIGHT = canvas.height; }
+        updateScreenSize();
+
+        const SAMPLE_OWNERS = ['Bruno','Luna','Diego','Maya','Ciro','Nora','Héctor','Vega','Río','Iris','Sol','Paco','Gael','Tula','Zara'];
+
+        // Helpers
+        function randomBetween(min,max){ return min + Math.random()*(max-min); }
+        function computeMaxVaccines(count){ return Math.ceil(count * VACCINE_RATIO); }
+        function updateVaccinesDisplay(){ vacunasEl.textContent = `${vaccines_used} / ${max_vaccines}`; }
+
+        // Herd UI update
+        function updateHerdUI(){
+            herdsCountEl.textContent = numHerds;
+            perHerdCountEl.textContent = perHerd;
+            lonersCountEl.textContent = numLoners;
+            totalAnimals = numHerds * perHerd + numLoners;
+            totalCountEl.textContent = totalAnimals;
+            solosCountEl.textContent = numLoners;
+            max_vaccines = computeMaxVaccines(totalAnimals);
+            updateVaccinesDisplay();
+            cuarentenasEl.textContent = quarantines_used; // mantener actualización inicial
+        }
+
+        // Movement/time control functions
+        function setMovement(val){
+            movementMultiplier = Math.max(0.1, Math.min(5, Math.round(val*10)/10));
+            moveValueEl.textContent = movementMultiplier.toFixed(1);
+        }
+        function setTime(val){
+            timeMultiplier = Math.max(0.1, Math.min(5, Math.round(val*10)/10));
+            timeValueEl.textContent = timeMultiplier.toFixed(1);
+        }
+
+        moveMinus.addEventListener('click', ()=> setMovement(movementMultiplier - 0.1));
+        movePlus.addEventListener('click', ()=> setMovement(movementMultiplier + 0.1));
+        timeMinus.addEventListener('click', ()=> setTime(timeMultiplier - 0.1));
+        timePlus.addEventListener('click', ()=> setTime(timeMultiplier + 0.1));
+
+        // Initialize control displays
+        setMovement(1.0);
+        setTime(1.0);
+
+        // Herd control buttons
+        incHerdsBtn.addEventListener('click', ()=> { numHerds = Math.min(50, numHerds + 1); updateHerdUI(); });
+        decHerdsBtn.addEventListener('click', ()=> { numHerds = Math.max(1, numHerds - 1); updateHerdUI(); });
+        incPerHerdBtn.addEventListener('click', ()=> { perHerd = Math.min(200, perHerd + 1); updateHerdUI(); });
+        decPerHerdBtn.addEventListener('click', ()=> { perHerd = Math.max(1, perHerd - 1); updateHerdUI(); });
+        incLonersBtn.addEventListener('click', ()=> { numLoners = Math.min(200, numLoners + 1); updateHerdUI(); });
+        decLonersBtn.addEventListener('click', ()=> { numLoners = Math.max(0, numLoners - 1); updateHerdUI(); });
+
+        // Animal class — use movementMultiplier inside move() and timeMultiplier in game loop
+        class Animal {
+            constructor(x,y,herdId=-1,state='S',vaccinated=false,quarantined=false,days_exposed=0,days_infected=0,name='',sociable=false){
+                this.x=x; this.y=y; this.herdId=herdId; this.state=state; this.vaccinated=vaccinated;
+                this.quarantined=quarantined; this.days_exposed=days_exposed; this.days_infected=days_infected;
+                this.flash=null; this.name=name; this.sociable=sociable;
+                this.visitTarget=null; this.visitTimer=0;
+                this.visitCooldown = randomBetween(COOLDOWN_MIN_HOURS, COOLDOWN_MAX_HOURS);
+            }
+            move(deltaSimHours){
+                if(this.state==='D' || this.quarantined) return;
+                const m = movementMultiplier;
+                if(this.sociable && this.visitTarget !== null && herdCenters[this.visitTarget]){
+                    const hc = herdCenters[this.visitTarget];
+                    const dx = hc.x - this.x, dy = hc.y - this.y;
+                    const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+                    const pull = 0.06 * m;
+                    this.x += (dx/dist)*pull*Math.min(dist,40);
+                    this.y += (dy/dist)*pull*Math.min(dist,40);
+                    this.x += (Math.random()*6-3)*0.6*m;
+                    this.y += (Math.random()*6-3)*0.6*m;
+                } else if(this.herdId >= 0){
+                    const herd = herdCenters[this.herdId];
+                    if(herd){
+                        const dx = herd.x - this.x, dy = herd.y - this.y;
+                        const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+                        // Slightly weaker pull so animals roam further inside herd
+                        const pullStrength = 0.008 * m;
+                        this.x += (dx/dist)*pullStrength*Math.min(dist,20);
+                        this.y += (dy/dist)*pullStrength*Math.min(dist,20);
+                        this.x += (Math.random()*6-3)*0.45*m;
+                        this.y += (Math.random()*6-3)*0.45*m;
+                        // When outside the (bigger) spread radius, apply gentle correction (keeps them from clustering too tightly)
+                        if(dist > HERD_SPREAD_RADIUS){
+                            const extra = 0.05 * m;
+                            this.x += (dx/dist)*extra*(dist-HERD_SPREAD_RADIUS);
+                            this.y += (dy/dist)*extra*(dist-HERD_SPREAD_RADIUS);
+                        }
+                    }
+                } else {
+                    const neighbors = animals.filter(a => a!==this && a.herdId===-1 && Math.hypot(a.x-this.x,a.y-this.y) <= 80);
+                    if(neighbors.length>0){
+                        let avgX=0, avgY=0;
+                        for(let n of neighbors){ avgX+=n.x; avgY+=n.y; }
+                        avgX/=neighbors.length; avgY/=neighbors.length;
+                        const dx = avgX - this.x, dy = avgY - this.y;
+                        const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+                        const pull = 0.03 * m;
+                        this.x += (dx/dist)*pull*Math.min(dist,15);
+                        this.y += (dy/dist)*pull*Math.min(dist,15);
+                    } else {
+                        this.x += (Math.random()*10-5)*m;
+                        this.y += (Math.random()*10-5)*m;
+                    }
+                    this.x += (Math.random()*6-3)*0.6*m;
+                    this.y += (Math.random()*6-3)*0.6*m;
+                }
+                this.x = Math.max(5, Math.min(SCREEN_WIDTH-5, this.x));
+                this.y = Math.max(5, Math.min(SCREEN_HEIGHT-5, this.y));
+            }
+            update(deltaSimHours){
+                if(!deltaSimHours) return;
+                const deltaDays = deltaSimHours/24;
+                if(this.sociable){
+                    if(this.visitTarget !== null){
+                        this.visitTimer -= deltaSimHours;
+                        if(this.visitTimer <= 0){ this.visitTarget=null; this.visitTimer=0; this.visitCooldown = randomBetween(COOLDOWN_MIN_HOURS, COOLDOWN_MAX_HOURS); }
+                    } else {
+                        this.visitCooldown -= deltaSimHours;
+                        if(this.visitCooldown <= 0 && herdCenters.length>1){
+                            const possible=[]; for(let i=0;i<herdCenters.length;i++) if(i!==this.herdId) possible.push(i);
+                            if(possible.length>0){ this.visitTarget = possible[Math.floor(Math.random()*possible.length)]; this.visitTimer = randomBetween(VISIT_MIN_HOURS, VISIT_MAX_HOURS); }
+                            else this.visitCooldown = randomBetween(COOLDOWN_MIN_HOURS, COOLDOWN_MAX_HOURS);
+                        }
+                    }
+                }
+                if(this.state==='E'){ this.days_exposed += deltaDays; if(this.days_exposed >= INCUBATION_PERIOD) this.state='I'; }
+                else if(this.state==='I'){ this.days_infected += deltaDays; if(Math.random() < DEATH_RATE * deltaDays){ this.state='D'; this.quarantined=false; } else if(this.days_infected > 14) this.state='R'; }
+                if(this.quarantined && this.days_infected > QUARANTINE_DURATION) this.quarantined=false;
+                if(this.flash){ this.flash.remaining--; if(this.flash.remaining<=0) this.flash=null; }
+            }
+            draw(){
+                const stateColors = { 'S':'#2ecc71','E':'#f1c40f','I':'#e74c3c','R':'#3498db','D':'#2d2d2d' };
+                let fillColor = stateColors[this.state] || '#999';
+                if(this.flash){ if(this.flash.type==='vaccine') fillColor = '#7CFC00'; else if(this.flash.type==='quarantine') fillColor = '#FFA07A'; }
+                ctx.fillStyle = fillColor; ctx.beginPath(); ctx.arc(this.x,this.y,6,0,Math.PI*2); ctx.fill();
+                if(this.vaccinated){ ctx.lineWidth=2; ctx.strokeStyle='rgba(0,200,0,0.9)'; ctx.beginPath(); ctx.arc(this.x,this.y,9,0,Math.PI*2); ctx.stroke(); }
+                if(this.quarantined){ ctx.lineWidth=2; ctx.strokeStyle='rgba(255,140,0,0.95)'; ctx.beginPath(); ctx.arc(this.x,this.y,11,0,Math.PI*2); ctx.stroke(); }
+                if(this.sociable){ ctx.fillStyle='#c23bff'; ctx.beginPath(); ctx.arc(this.x+7,this.y-7,3,0,Math.PI*2); ctx.fill(); }
+                if(this.state==='D'){ ctx.strokeStyle='#111'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(this.x-5,this.y-5); ctx.lineTo(this.x+5,this.y+5); ctx.moveTo(this.x+5,this.y-5); ctx.lineTo(this.x-5,this.y+5); ctx.stroke(); }
+            }
+        }
+
+        // Infection check now uses deltaSimHours to scale probability by simulated time
+        function checkInfection(animalsArr, deltaSimHours=1){
+            // interpret INFECTION_RATE as base probability per HOUR of transmission at close contact
+            for (let a of animalsArr) {
+                if (a.state === 'I' && !a.quarantined) {
+                    for (let b of animalsArr) {
+                        if (b.state === 'S') {
+                            const d = Math.hypot(a.x - b.x, a.y - b.y);
+                            if (d < 20) {
+                                const vaccFactor = b.vaccinated ? 0.5 : 1;
+                                // probability over deltaSimHours: 1 - (1 - base)^(hours)
+                                const basePerHour = INFECTION_RATE * vaccFactor;
+                                // clamp basePerHour to [0,0.99] for numerical safety
+                                const clampedBase = Math.max(0, Math.min(0.99, basePerHour));
+                                const prob = 1 - Math.pow(1 - clampedBase, Math.max(0, deltaSimHours));
+                                if (Math.random() < prob) {
+                                    b.state = 'E';
+                                    b.days_exposed = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function createHerdOwners(count){ herdOwners=[]; for(let i=0;i<count;i++) herdOwners.push(SAMPLE_OWNERS[i % SAMPLE_OWNERS.length]); }
+        function createHerdCenters(count){
+            herdCenters = []; const cx = SCREEN_WIDTH/2, cy = SCREEN_HEIGHT/2, radius = Math.min(SCREEN_WIDTH,SCREEN_HEIGHT)/3;
+            for(let i=0;i<count;i++){ const angle = (i/count)*Math.PI*2; const jitter=20; const x = cx + Math.cos(angle)*radius + (Math.random()*2-1)*jitter; const y = cy + Math.sin(angle)*radius + (Math.random()*2-1)*jitter; herdCenters.push({x,y}); }
+        }
+        function driftHerdCenters(){ for(let h of herdCenters){ h.x += (Math.random()*6-3)*0.1; h.y += (Math.random()*6-3)*0.1; } }
+
+        function createAnimalsForHerds(herdCount, perHerdCount, lonersCount){
+            updateScreenSize();
+            const newTotal = herdCount * perHerdCount + lonersCount;
+            createHerdOwners(herdCount); createHerdCenters(herdCount);
+            const newAnimals = [];
+            for(let h=0; h<herdCount; h++){
+                const owner = herdOwners[h];
+                const sociableCount = Math.min(2, Math.max(1, Math.round(Math.random()+1)));
+                const sociableIndices = new Set();
+                while(sociableIndices.size < sociableCount && sociableIndices.size < perHerdCount) sociableIndices.add(Math.floor(Math.random()*perHerdCount));
+                for(let i=0;i<perHerdCount;i++){
+                    const hc = herdCenters[h], jitter = HERD_SPREAD_RADIUS * 1.1; // use a larger initial jitter so animals start more spread
+                    const x = Math.max(5, Math.min(SCREEN_WIDTH-5, hc.x + (Math.random()*2-1)*jitter));
+                    const y = Math.max(5, Math.min(SCREEN_HEIGHT-5, hc.y + (Math.random()*2-1)*jitter));
+                    const name = `${owner}-${i+1}`, sociable = sociableIndices.has(i);
+                    newAnimals.push(new Animal(x,y,h,'S',false,false,0,0,name,sociable));
+                }
+            }
+            for(let l=0;l<lonersCount;l++){
+                const x = Math.max(5, Math.min(SCREEN_WIDTH-5, Math.random()*SCREEN_WIDTH));
+                const y = Math.max(5, Math.min(SCREEN_HEIGHT-5, Math.random()*SCREEN_HEIGHT));
+                newAnimals.push(new Animal(x,y,-1,'S',false,false,0,0,`Solo-${l+1}`,false));
+            }
+            animals = newAnimals; totalAnimals = newTotal; max_vaccines = computeMaxVaccines(totalAnimals); updateVaccinesDisplay();
+        }
+
+        function clearCanvas(){ ctx.clearRect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT); }
+
+        function formatTime(hours){
+            if(hours===null||hours===undefined) return '-';
+            const totalHours = Math.floor(hours);
+            const days = Math.floor(totalHours/24);
+            const remHours = totalHours % 24;
+            return `${days}d ${remHours}h`;
+        }
+
+        function gameLoop(timestamp){
+            if(!gameRunning) return;
+            let deltaMs = 0; if(lastTimestamp !== null && timestamp !== undefined) deltaMs = timestamp - lastTimestamp; lastTimestamp = timestamp;
+            const deltaSeconds = deltaMs / 1000;
+
+            let deltaSimHours;
+            if(gameStage === 'prep'){
+                prepTime += deltaSeconds;
+                // NO avanza el tiempo de simulación
+                deltaSimHours = 0;
+                if(prepTime >= PREP_DURATION){
+                    gameStage = 'play';
+                    setMovement(1.0);
+                    setTime(1.0);
+                }
+            } else {
+                // use separate time multiplier for simulation time progression
+                deltaSimHours = deltaSeconds * timeMultiplier;
+                simTimeHours += deltaSimHours;
+            }
+
+            if(infectionStart === null && animals.some(a=>a.state==='I')) infectionStart = simTimeHours;
+            driftHerdCenters();
+            updateScreenSize();
+            clearCanvas();
+            for(let a of animals){ a.move(deltaSimHours); a.update(deltaSimHours); a.draw(); }
+            // pass deltaSimHours so infection chance scales with simulation time step (slower growth)
+            checkInfection(animals, deltaSimHours);
+
+            // update stats UI
+            let counts = { S:0,E:0,I:0,R:0,D:0 };
+            for(let a of animals) counts[a.state]++;
+            sCountEl.textContent = counts.S;
+            eCountEl.textContent = counts.E;
+            iCountEl.textContent = counts.I;
+            rCountEl.textContent = counts.R;
+            dCountEl.textContent = counts.D;
+            totalCountEl.textContent = animals.length;
+            solosCountEl.textContent = animals.filter(a=>a.herdId===-1).length;
+
+            // Update prep phase display
+            if(gameStage === 'prep'){
+                prepMessageEl.style.display = 'block';
+                prepCountdownEl.textContent = Math.max(0, Math.ceil(PREP_DURATION - prepTime));
+            } else {
+                prepMessageEl.style.display = 'none';
+            }
+
+            simTimeDisplay.textContent = formatTime(simTimeHours);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Apply now (yellow) applies immediately regardless of running or not
+        applyHerdsBtn.addEventListener('click', ()=>{
+            createAnimalsForHerds(numHerds, perHerd, numLoners);
+            // keep simulation running state as-is; do not reset infections unless there is no infected
+            if(!animals.some(a=>a.state==='I') && animals.length>0){
+                animals[0].state = 'I';
+                animals[0].days_infected = 0;
+                infectionStart = simTimeHours;
+            }
+            updateHerdUI();
+        });
+
+        // menu & control handlers
+        newGameBtn.addEventListener('click', ()=>{
+            updateScreenSize();
+            simTimeHours = 0; infectionStart = null; vaccines_used = 0; quarantines_used = 0;
+            createHerdOwners(numHerds); createHerdCenters(numHerds);
+            animals = [];
+            for(let h=0; h<numHerds; h++){
+                const hc = herdCenters[h], owner = herdOwners[h];
+                const sociableCount = Math.min(2, Math.max(1, Math.round(Math.random()+1)));
+                const sociableIndices = new Set();
+                while(sociableIndices.size < sociableCount && sociableIndices.size < perHerd) sociableIndices.add(Math.floor(Math.random()*perHerd));
+                for(let i=0;i<perHerd;i++){
+                    const jitter = HERD_SPREAD_RADIUS * 1.1;
+                    const x = Math.max(5, Math.min(SCREEN_WIDTH-5, hc.x + (Math.random()*2-1)*jitter));
+                    const y = Math.max(5, Math.min(SCREEN_HEIGHT-5, hc.y + (Math.random()*2-1)*jitter));
+                    animals.push(new Animal(x,y,h,'S',false,false,0,0,`${owner}-${i+1}`,sociableIndices.has(i)));
+                }
+            }
+            for(let l=0;l<numLoners;l++){
+                const x = Math.max(5, Math.min(SCREEN_WIDTH-5, Math.random()*SCREEN_WIDTH));
+                const y = Math.max(5, Math.min(SCREEN_HEIGHT-5, Math.random()*Math.random()*SCREEN_HEIGHT));
+                animals.push(new Animal(x,y,-1,'S',false,false,0,0,`Solo-${l+1}`,false));
+            }
+            if(animals.length>0){ const idx = Math.floor(Math.random()*animals.length); animals[idx].state='I'; animals[idx].days_infected=0; infectionStart=0; }
+            totalAnimals = animals.length; max_vaccines = computeMaxVaccines(totalAnimals);
+            // hide menu, collapse left column to center stats+canvas
+            menuDiv.style.display = 'none';
+            mainElem.style.gridTemplateColumns = '1fr';
+            statsPanel.style.display = 'block';
+            pauseButton.style.display = 'block';
+            gameStage = 'prep';
+            prepTime = 0;
+            gameRunning = true;
+            movementMultiplier = 0;
+            setMovement(0);
+            setTime(0);
+            lastTimestamp=null; requestAnimationFrame(gameLoop);
+        });
+
+        resumeGameBtn.addEventListener('click', ()=>{
+            const saved = localStorage.getItem('virusGameState');
+            if(saved){
+                try {
+                    const gs = JSON.parse(saved);
+                    herdCenters = gs.herdCenters || []; herdOwners = gs.herdOwners || [];
+                    numHerds = gs.numHerds || 3; perHerd = gs.perHerd || 16; numLoners = gs.numLoners || 2;
+                    animals = (gs.animals||[]).map(a=>{ const obj=new Animal(a.x,a.y,a.herdId,a.state,a.vaccinated,a.quarantined,a.days_exposed,a.days_infected,a.name,a.sociable); obj.visitTarget = a.visitTarget!==undefined ? a.visitTarget : null; obj.visitTimer=a.visitTimer||0; obj.visitCooldown = a.visitCooldown||randomBetween(COOLDOWN_MIN_HOURS, COOLDOWN_MAX_HOURS); return obj; });
+                    simTimeHours = gs.simTimeHours || 0; infectionStart = gs.infectionStart !== undefined ? gs.infectionStart : null;
+                    vaccines_used = gs.vaccines_used || animals.filter(a=>a.vaccinated).length || 0;
+                    quarantines_used = gs.quarantines_used || animals.filter(a=>a.quarantined).length || 0;
+                    totalAnimals = animals.length; max_vaccines = computeMaxVaccines(totalAnimals);
+                    menuDiv.style.display = 'none'; mainElem.style.gridTemplateColumns='1fr'; statsPanel.style.display = 'block'; pauseButton.style.display='block';
+                    gameRunning = true; lastTimestamp=null; requestAnimationFrame(gameLoop);
+                } catch(e){ newGameBtn.click(); }
+            } else newGameBtn.click();
+        });
+
+        backToMenuBtn.addEventListener('click', ()=>{
+            gameRunning = false;
+            pauseButton.style.display = 'none';
+            menuDiv.style.display = 'block';
+            mainElem.style.gridTemplateColumns = '360px 1fr';
+            // hide stats panel when showing menu
+            statsPanel.style.display = 'none';
+        });
+
+        pauseButton.addEventListener('click', ()=>{
+            gameRunning = false;
+            pauseButton.style.display = 'none';
+            menuDiv.style.display = 'block';
+            mainElem.style.gridTemplateColumns = '360px 1fr';
+            // hide stats panel while paused/menu visible
+            statsPanel.style.display = 'none';
+        });
+
+        // Canvas interactions
+        canvas.addEventListener('mousedown',(e)=>{
+            if(!gameRunning) return;
+            const rect = canvas.getBoundingClientRect();
+            // Ajuste de escala CSS -> coordenadas internas del canvas
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mx = (e.clientX - rect.left) * scaleX;
+            const my = (e.clientY - rect.top) * scaleY;
+            for(let animal of animals){
+                if(Math.hypot(animal.x-mx, animal.y-my) < 10){
+                    // Clic izquierdo -> vacunar (si no está muerto y no está ya vacunado y quedan vacunas)
+                    if(e.button === 0){
+                        if(animal.state !== 'D' && !animal.vaccinated && vaccines_used < max_vaccines){
+                            animal.vaccinated = true;
+                            vaccines_used++;
+                            animal.flash = { type: 'vaccine', remaining: 30 };
+                            updateVaccinesDisplay();
+                        }
+                    }
+                    // Clic derecho -> cuarentena (si está infectado y no está ya en cuarentena)
+                    else if(e.button === 2){
+                        if(animal.state === 'I' && !animal.quarantined){
+                            animal.quarantined = true;
+                            quarantines_used++;
+                            cuarentenasEl.textContent = quarantines_used;
+                            animal.flash = { type: 'quarantine', remaining: 30 };
+                        }
+                    }
+                    // si se alcanzo a interactuar con un animal, no evaluar más
+                    break;
+                }
+            }
+        });
+        canvas.addEventListener('contextmenu', (e)=> e.preventDefault());
+
+        canvas.addEventListener('mousemove',(e)=>{
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            let nearest=null, nd=Infinity;
+            for(let a of animals){ const d=Math.hypot(a.x-mx,a.y-my); if(d<nd){ nd=d; nearest=a; } }
+            const tooltip = document.getElementById('tooltip');
+            if(nearest && nd <= 12){
+                tooltip.style.display='block';
+                tooltip.textContent = nearest.name + (nearest.sociable ? ' — Sociable: Sí' : '');
+                tooltip.style.left = (e.clientX + 8) + 'px'; tooltip.style.top = (e.clientY + 8) + 'px';
+            } else tooltip.style.display='none';
+        });
+
+        // autosave
+        setInterval(()=>{ if(gameRunning){
+            try{ const state = JSON.stringify({ animals, herdCenters, herdOwners, numHerds, perHerd, numLoners, simTimeHours, infectionStart, vaccines_used, quarantines_used }); localStorage.setItem('virusGameState', state); } catch(e) {}
+        } }, 5000);
+
+        // startup
+        window.addEventListener('load', ()=>{
+            updateScreenSize();
+            const saved = localStorage.getItem('virusGameState');
+            resumeGameBtn.style.display = saved ? 'inline-block' : 'none';
+            // show intro initially and hide menu and statsPanel
+            document.getElementById('introScreen').style.display = 'block';
+            menuDiv.style.display = 'none';
+            statsPanel.style.display = 'none';
+            pauseButton.style.display = 'none';
+            updateHerdUI();
+        });
+
+        // Intro continue button
+        document.getElementById('introContinue').addEventListener('click', ()=>{
+            document.getElementById('introScreen').style.display = 'none';
+            menuDiv.style.display = 'block';
+            gameStage = 'menu';
+        });
+
+        window.addEventListener('resize', ()=> setTimeout(()=>{ updateScreenSize(); },60));
+    </script>
+</body>
+</html>
